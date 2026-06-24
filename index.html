@@ -1,0 +1,1092 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>2027 IndyCar Lineup Predictor</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0D0D0D;--surface:#1A1A1A;--surface2:#242424;--border:#2E2E2E;
+  --red:#C8102E;--yellow:#F5C518;--white:#F0EDE8;--grey:#888;--grey-dim:#555;
+  --green:#2ECC71;--mfr-gold:#D4A017;--mfr-gold-dim:#7A5C0A;
+  --fd:'Bebas Neue',sans-serif;--fb:'Inter',sans-serif;
+}
+body{background:var(--bg);color:var(--white);font-family:var(--fb);min-height:100vh;overflow-x:hidden}
+::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+@keyframes pulse{0%,100%{border-color:var(--grey-dim)}50%{border-color:var(--grey)}}
+@keyframes spin{to{transform:rotate(360deg)}}
+#app{display:flex;flex-direction:column;min-height:100vh}
+#header{border-bottom:1px solid var(--border);padding:16px 24px;display:flex;align-items:center;
+  justify-content:space-between;position:sticky;top:0;background:rgba(13,13,13,0.96);
+  backdrop-filter:blur(8px);z-index:100}
+.logo-mark{width:30px;height:30px;background:var(--red);clip-path:polygon(0 0,100% 0,85% 100%,15% 100%);flex-shrink:0}
+.logo-text{font-family:var(--fd);font-size:22px;letter-spacing:2px;line-height:1}
+.logo-text span{color:var(--red)}
+.logo-sub{font-size:10px;color:var(--grey);letter-spacing:1px;text-transform:uppercase;margin-top:1px}
+#progress-bar{height:3px;background:var(--border)}
+#progress-fill{height:100%;width:0%;background:linear-gradient(90deg,var(--red),var(--yellow));transition:width 0.4s}
+#main{display:grid;grid-template-columns:1fr 252px;flex:1;min-height:0}
+#left{padding:20px 22px;border-right:1px solid var(--border);overflow-y:auto}
+#right{padding:16px 13px;display:flex;flex-direction:column;background:var(--surface);
+  position:sticky;top:80px;height:calc(100vh - 83px);overflow:hidden}
+#submit-bar{padding:14px 24px;border-top:1px solid var(--border);background:var(--bg);
+  display:flex;align-items:center;justify-content:space-between;
+  position:sticky;bottom:0;gap:14px;flex-wrap:wrap;z-index:50}
+.sh{font-family:var(--fd);font-size:15px;letter-spacing:2px;color:var(--grey);
+  margin-bottom:12px;text-transform:uppercase;display:flex;align-items:center;gap:10px}
+.sh::after{content:'';flex:1;height:1px;background:var(--border)}
+.teams-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(264px,1fr));gap:12px;margin-bottom:22px}
+.team-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden;transition:border-color 0.3s}
+.team-card.partial{border-color:var(--yellow)}.team-card.complete{border-color:var(--green)}
+.team-header{padding:9px 14px;background:var(--surface2);border-bottom:1px solid var(--border);
+  display:flex;align-items:center;justify-content:space-between}
+.team-name{font-family:var(--fd);font-size:18px;letter-spacing:1.5px}
+.team-badge{font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;padding:3px 8px;border-radius:3px}
+.badge-full{color:var(--green);background:rgba(46,204,113,0.12)}
+.team-slots{padding:10px 12px;display:flex;flex-direction:column;gap:7px}
+.slot{height:44px;border:1.5px dashed var(--grey-dim);border-radius:6px;
+  display:flex;align-items:center;justify-content:space-between;padding:0 12px;
+  cursor:pointer;background:#1E1E1E;transition:all 0.2s;animation:pulse 2s ease-in-out infinite;position:relative}
+.slot:hover{border-color:var(--red);background:rgba(200,16,46,0.04)}
+.slot.filled{border-style:solid;border-color:var(--green);background:#192619;cursor:default;animation:none}
+.slot.filled-mfr{border-color:var(--mfr-gold);background:rgba(212,160,23,0.08)}
+.slot-label{font-size:11px;font-weight:500;letter-spacing:1px;text-transform:uppercase;color:var(--grey)}
+.slot-driver{font-weight:600;font-size:14px;color:var(--white)}
+.slot-driver-mfr{color:var(--mfr-gold)}
+.slot-remove{width:22px;height:22px;border-radius:50%;background:rgba(200,16,46,0.2);
+  border:none;color:var(--red);font-size:13px;display:flex;align-items:center;justify-content:center;
+  padding:0;cursor:pointer;opacity:0;transition:opacity 0.15s;flex-shrink:0}
+.slot:hover .slot-remove{opacity:1}
+#mfr-section{background:var(--surface);border:1px solid var(--mfr-gold-dim);border-radius:8px;
+  overflow:hidden;margin-bottom:22px;opacity:0.55;transition:all 0.3s}
+#mfr-section.active{opacity:1;border-color:var(--mfr-gold)}
+#mfr-header{padding:10px 14px;background:rgba(212,160,23,0.06);
+  border-bottom:1px solid var(--mfr-gold-dim);display:flex;align-items:center;justify-content:space-between}
+#mfr-section.active #mfr-header{border-bottom-color:var(--mfr-gold)}
+.mfr-title{font-family:var(--fd);font-size:16px;letter-spacing:1.5px;color:var(--mfr-gold)}
+.mfr-sub{font-size:11px;color:var(--grey);margin-top:1px}
+#mfr-slots{padding:10px 12px;display:flex;gap:10px}
+.mfr-slot{flex:1}
+.mfr-slot .slot{border-color:var(--mfr-gold-dim);pointer-events:none}
+#mfr-section.active .mfr-slot .slot{pointer-events:auto}
+#mfr-section.active .mfr-slot .slot:hover{border-color:var(--mfr-gold)}
+.toggle-wrap{display:flex;align-items:center;gap:9px}
+.toggle-lbl{font-size:11px;font-weight:500;color:var(--grey);letter-spacing:0.5px}
+.toggle{width:42px;height:22px;background:var(--border);border-radius:11px;position:relative;
+  cursor:pointer;transition:background 0.25s;border:none;flex-shrink:0}
+.toggle.on{background:var(--mfr-gold)}
+.toggle::after{content:'';width:16px;height:16px;background:var(--white);border-radius:50%;
+  position:absolute;top:3px;left:3px;transition:transform 0.25s}
+.toggle.on::after{transform:translateX(20px)}
+.pool-count{font-size:11px;color:var(--grey);margin-bottom:7px;letter-spacing:0.5px}
+.pool-search{background:var(--surface2);border:1px solid var(--border);border-radius:6px;
+  padding:9px 12px;color:var(--white);font-family:var(--fb);font-size:13px;
+  width:100%;outline:none;transition:border-color 0.2s;margin-bottom:6px}
+.pool-search:focus{border-color:var(--red)}
+.pool-search::placeholder{color:var(--grey)}
+#driver-list{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:4px;padding-right:2px}
+.driver-chip{padding:7px 10px;background:var(--surface2);border:1px solid var(--border);
+  border-radius:6px;display:flex;align-items:center;justify-content:space-between;transition:all 0.12s}
+.driver-chip.used{opacity:0.25;text-decoration:line-through;background:transparent;border-color:transparent}
+.driver-chip.custom-chip{border-color:var(--mfr-gold-dim)}
+.chip-name{font-size:13px;font-weight:600;letter-spacing:0.3px}
+.chip-dot{width:6px;height:6px;border-radius:50%;background:var(--border)}
+.driver-chip.used .chip-dot{background:var(--grey-dim)}
+.custom-add-row{display:flex;gap:6px;margin-bottom:6px}
+.custom-input{background:var(--surface2);border:1px solid var(--mfr-gold-dim);border-radius:6px;
+  padding:7px 10px;color:var(--white);font-family:var(--fb);font-size:12px;
+  flex:1;outline:none;transition:border-color 0.2s}
+.custom-input:focus{border-color:var(--mfr-gold)}
+.custom-input::placeholder{color:var(--grey)}
+.custom-add-btn{background:var(--mfr-gold-dim);border:none;border-radius:6px;color:var(--mfr-gold);
+  font-size:18px;width:32px;cursor:pointer;transition:background 0.2s;flex-shrink:0}
+.custom-add-btn:hover{background:rgba(212,160,23,0.3)}
+.status-text{font-size:13px;color:var(--grey)}
+.status-text.complete{color:var(--green)}
+.name-input{background:var(--surface2);border:1px solid var(--border);border-radius:6px;
+  padding:9px 12px;color:var(--white);font-family:var(--fb);font-size:13px;
+  width:150px;outline:none;transition:border-color 0.2s}
+.name-input:focus{border-color:var(--red)}
+.name-input::placeholder{color:var(--grey)}
+.btn{font-family:var(--fd);font-size:17px;letter-spacing:2px;padding:10px 24px;
+  border-radius:6px;border:none;cursor:pointer;transition:all 0.2s;
+  clip-path:polygon(0 0,100% 0,97% 100%,3% 100%)}
+.btn-red{background:var(--red);color:var(--white)}
+.btn-red:hover{background:#e0112f}
+.btn-red:disabled{opacity:0.4;cursor:not-allowed}
+.btn-green{background:var(--green);color:var(--white)}
+.btn-outline{background:none;border:1px solid var(--border);color:var(--grey);
+  clip-path:none;font-family:var(--fd);font-size:17px;letter-spacing:2px;padding:10px 24px;border-radius:6px}
+.btn-outline:hover{border-color:var(--grey);color:var(--white)}
+.hdr-btn{background:none;border:1px solid var(--border);border-radius:6px;color:var(--grey);
+  font-size:12px;font-weight:500;padding:7px 14px;letter-spacing:0.5px;cursor:pointer;transition:all 0.2s;font-family:var(--fb)}
+.hdr-btn:hover{border-color:var(--grey);color:var(--white)}
+.hdr-btn.admin-btn{border-color:var(--mfr-gold-dim);color:var(--mfr-gold)}
+.hdr-btn.admin-btn:hover{border-color:var(--mfr-gold)}
+.btn-submit-wrap{display:flex;align-items:center;gap:10px}
+.spinner{width:16px;height:16px;border:2px solid var(--border);border-top-color:var(--white);
+  border-radius:50%;animation:spin 0.7s linear infinite;display:inline-block;flex-shrink:0}
+.hdr-right{display:flex;align-items:center;gap:10px}
+.hdr-left{display:flex;align-items:center;gap:14px}
+.hdr-count{font-size:12px;color:var(--grey)}
+.hdr-count strong{color:var(--white);font-weight:600}
+
+/* overlays */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,0.78);display:none;align-items:center;
+  justify-content:center;backdrop-filter:blur(4px);z-index:500}
+.overlay.open{display:flex}
+.big-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.88);display:none;align-items:flex-start;
+  justify-content:center;backdrop-filter:blur(6px);z-index:600;overflow-y:auto;padding:40px 16px}
+.big-overlay.open{display:flex}
+.modal{background:var(--surface);border:1px solid var(--border);border-radius:12px;
+  width:340px;max-height:75vh;display:flex;flex-direction:column;
+  box-shadow:0 24px 64px rgba(0,0,0,0.6);overflow:hidden}
+.big-modal{background:var(--surface);border:1px solid var(--border);border-radius:12px;
+  width:100%;max-width:820px;box-shadow:0 32px 80px rgba(0,0,0,0.7);
+  display:flex;flex-direction:column;max-height:88vh}
+.modal-hdr{padding:14px 18px;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+.modal-title{font-family:var(--fd);font-size:20px;letter-spacing:1px}
+.modal-sub{font-size:11px;color:var(--grey);margin-top:2px}
+.modal-close{background:none;border:none;color:var(--grey);font-size:20px;line-height:1;padding:4px;cursor:pointer}
+.modal-search-wrap{padding:10px 14px 0}
+.modal-search{background:var(--surface2);border:1px solid var(--border);border-radius:6px;
+  padding:9px 12px;color:var(--white);font-family:var(--fb);font-size:13px;
+  width:100%;outline:none;transition:border-color 0.2s}
+.modal-search:focus{border-color:var(--red)}
+.modal-search::placeholder{color:var(--grey)}
+.modal-list{flex:1;overflow-y:auto;padding:10px}
+.modal-driver{padding:9px 12px;border-radius:6px;cursor:pointer;font-size:14px;font-weight:500;
+  display:flex;align-items:center;justify-content:space-between;transition:background 0.1s}
+.modal-driver:hover{background:var(--surface2)}
+.modal-driver.used{opacity:0.28;text-decoration:line-through;cursor:not-allowed;pointer-events:none}
+.modal-used-tag{font-size:11px;color:var(--grey)}
+.modal-footer{padding:12px 14px;border-top:1px solid var(--border);flex-shrink:0}
+
+/* compare */
+.cmp-tabs{border-bottom:1px solid var(--border);padding:0 16px;display:flex;gap:4px;flex-shrink:0}
+.tab-btn{background:none;border:none;padding:8px 18px;font-size:13px;font-weight:500;
+  letter-spacing:0.5px;cursor:pointer;color:var(--grey);border-bottom:2px solid transparent;font-family:var(--fb)}
+.tab-btn.active{color:var(--white);border-bottom-color:var(--red)}
+.cmp-body{flex:1;overflow-y:auto;padding:20px 24px}
+.cmp-footer{padding:14px 24px;border-top:1px solid var(--border);flex-shrink:0;display:flex;gap:10px;align-items:center}
+.cmp-team-title{font-family:var(--fd);font-size:16px;letter-spacing:1.5px;color:var(--grey);
+  margin-bottom:12px;padding-bottom:6px;border-bottom:1px solid var(--border)}
+.cmp-team-block{margin-bottom:28px}
+.cmp-slot-label{font-size:11px;font-weight:500;letter-spacing:1px;text-transform:uppercase;color:var(--grey-dim);margin-bottom:6px}
+.cmp-bar-row{display:flex;align-items:center;gap:8px;margin-bottom:4px}
+.cmp-bar-name{font-size:13px;font-weight:600;min-width:110px}
+.cmp-bar-name.secondary{font-size:12px;font-weight:400;color:var(--grey)}
+.cmp-bar-name.mfr-col{color:var(--mfr-gold)}
+.cmp-bar-track{flex:1;background:var(--border);border-radius:3px;overflow:hidden}
+.cmp-bar-fill{height:100%;border-radius:3px;transition:width 0.5s}
+.cmp-bar-pct{font-size:11px;color:var(--grey);min-width:36px;text-align:right}
+.cmp-bar-n{font-size:11px;color:var(--grey-dim);min-width:20px;text-align:right}
+.cmp-picks{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px;margin-bottom:10px}
+.cmp-pick-chip{background:var(--surface2);border:1px solid var(--border);border-radius:4px;
+  padding:3px 9px;font-size:12px;display:flex;align-items:center;gap:5px}
+.cmp-pick-name{color:var(--grey);font-size:11px}
+.cmp-pick-driver{font-weight:600;color:var(--white)}
+.cmp-pick-driver.mfr-col{color:var(--mfr-gold)}
+.cmp-pick-driver.correct{color:var(--green)}
+.cmp-pick-driver.incorrect{color:var(--red);text-decoration:line-through}
+.person-block{margin-bottom:28px;padding-bottom:20px;border-bottom:1px solid var(--border)}
+.person-block:last-child{border-bottom:none}
+.person-hdr{display:flex;align-items:center;gap:12px;margin-bottom:8px}
+.person-avatar{width:36px;height:36px;border-radius:50%;background:var(--red);
+  display:flex;align-items:center;justify-content:center;font-family:var(--fd);font-size:18px;flex-shrink:0}
+.person-name{font-weight:600;font-size:15px}
+.person-meta{font-size:11px;color:var(--grey)}
+.person-score{font-size:12px;font-weight:600;padding:3px 10px;border-radius:20px;
+  background:rgba(46,204,113,0.12);color:var(--green);margin-top:3px;display:inline-block}
+.person-chips{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:5px}
+.person-chip{display:flex;gap:7px;align-items:center;background:var(--surface2);
+  border:1px solid var(--border);border-radius:4px;padding:5px 10px;font-size:12px}
+.person-chip.mfr-chip{background:rgba(212,160,23,0.08);border-color:var(--mfr-gold)}
+.person-chip.correct-chip{border-color:var(--green);background:rgba(46,204,113,0.08)}
+.person-chip.incorrect-chip{border-color:rgba(200,16,46,0.4)}
+.person-chip-team{color:var(--grey-dim);font-size:10px;min-width:30px}
+.person-chip-driver{font-weight:600;color:var(--white)}
+.person-chip.mfr-chip .person-chip-team,.person-chip.mfr-chip .person-chip-driver{color:var(--mfr-gold)}
+.cmp-empty{text-align:center;padding:48px 24px}
+.cmp-empty-title{font-family:var(--fd);font-size:28px;letter-spacing:2px;margin-bottom:8px}
+.cmp-empty-sub{font-size:13px;color:var(--grey);margin-bottom:24px}
+.cmp-loading{display:flex;flex-direction:column;align-items:center;gap:14px;padding:48px 24px}
+.cmp-err-title{font-family:var(--fd);font-size:22px;letter-spacing:2px;margin-bottom:8px;color:var(--red)}
+.cmp-no-picks{font-size:12px;color:var(--grey-dim);font-style:italic}
+
+/* score badge in header of person view */
+.score-badge{font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;
+  background:rgba(46,204,113,0.15);color:var(--green);margin-left:8px}
+
+/* admin panel */
+.admin-modal{background:var(--surface);border:1px solid var(--mfr-gold);border-radius:12px;
+  width:100%;max-width:680px;box-shadow:0 32px 80px rgba(0,0,0,0.7);
+  display:flex;flex-direction:column;max-height:88vh}
+.admin-hdr{padding:14px 20px;border-bottom:1px solid var(--mfr-gold-dim);
+  display:flex;align-items:center;justify-content:space-between;flex-shrink:0;
+  background:rgba(212,160,23,0.06)}
+.admin-title{font-family:var(--fd);font-size:22px;letter-spacing:2px;color:var(--mfr-gold)}
+.admin-body{flex:1;overflow-y:auto;padding:20px}
+.admin-team-block{margin-bottom:20px}
+.admin-team-name{font-family:var(--fd);font-size:15px;letter-spacing:1.5px;color:var(--grey);
+  margin-bottom:8px;padding-bottom:5px;border-bottom:1px solid var(--border)}
+.admin-slots{display:flex;flex-direction:column;gap:6px}
+.admin-slot-row{display:flex;align-items:center;gap:8px}
+.admin-slot-label{font-size:11px;font-weight:500;color:var(--grey-dim);letter-spacing:0.5px;min-width:48px;text-transform:uppercase}
+.admin-slot-input{background:var(--surface2);border:1px solid var(--border);border-radius:6px;
+  padding:7px 10px;color:var(--white);font-family:var(--fb);font-size:13px;
+  flex:1;outline:none;transition:border-color 0.2s}
+.admin-slot-input:focus{border-color:var(--mfr-gold)}
+.admin-slot-input::placeholder{color:var(--grey-dim)}
+.admin-slot-input.confirmed{border-color:var(--green);background:rgba(46,204,113,0.06)}
+.admin-save-btn{font-family:var(--fd);font-size:17px;letter-spacing:2px;
+  background:var(--mfr-gold);border:none;color:#000;padding:10px 28px;border-radius:6px;cursor:pointer;
+  clip-path:polygon(0 0,100% 0,97% 100%,3% 100%);transition:background 0.2s}
+.admin-save-btn:hover{background:#e8b820}
+
+/* password prompt */
+.pw-box{background:var(--surface);border:1px solid var(--mfr-gold);border-radius:12px;
+  padding:32px 36px;width:320px;text-align:center}
+.pw-title{font-family:var(--fd);font-size:24px;letter-spacing:2px;color:var(--mfr-gold);margin-bottom:6px}
+.pw-sub{font-size:12px;color:var(--grey);margin-bottom:20px}
+.pw-input{background:var(--surface2);border:1px solid var(--border);border-radius:6px;
+  padding:10px 12px;color:var(--white);font-family:var(--fb);font-size:14px;
+  width:100%;outline:none;transition:border-color 0.2s;margin-bottom:12px;text-align:center;letter-spacing:3px}
+.pw-input:focus{border-color:var(--mfr-gold)}
+.pw-input::placeholder{letter-spacing:0;color:var(--grey)}
+.pw-err{font-size:12px;color:var(--red);margin-bottom:10px;min-height:16px}
+.pw-btn{font-family:var(--fd);font-size:17px;letter-spacing:2px;background:var(--mfr-gold);
+  border:none;color:#000;padding:10px 28px;border-radius:6px;cursor:pointer;width:100%;
+  clip-path:polygon(0 0,100% 0,97% 100%,3% 100%)}
+
+/* confirmed lineup strip */
+#confirmed-strip{background:var(--surface);border-bottom:1px solid var(--border);
+  padding:8px 24px;display:none;align-items:center;gap:10px;flex-wrap:wrap}
+#confirmed-strip.visible{display:flex}
+.confirmed-label{font-family:var(--fd);font-size:13px;letter-spacing:1.5px;color:var(--green);flex-shrink:0}
+.confirmed-chips{display:flex;flex-wrap:wrap;gap:5px}
+.confirmed-chip{background:rgba(46,204,113,0.1);border:1px solid rgba(46,204,113,0.3);
+  border-radius:4px;padding:3px 9px;font-size:12px;font-weight:600;color:var(--green)}
+
+/* toast */
+.toast{position:fixed;bottom:88px;left:50%;transform:translateX(-50%) translateY(10px);
+  background:#333;border:1px solid var(--border);color:var(--white);
+  padding:8px 18px;border-radius:20px;font-size:13px;font-weight:500;
+  z-index:9999;pointer-events:none;white-space:nowrap;opacity:0;transition:all 0.2s}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+/* subs list in compare header */
+.subs-list-btn{font-size:11px;color:var(--grey);background:none;border:1px solid var(--border);
+  border-radius:4px;padding:3px 9px;cursor:pointer;font-family:var(--fb);transition:all 0.2s}
+.subs-list-btn:hover{border-color:var(--grey);color:var(--white)}
+.subs-list{font-size:12px;color:var(--grey);margin-top:6px;line-height:1.8}
+.subs-list span{color:var(--white);font-weight:500;margin-right:12px}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="header">
+    <div class="hdr-left">
+      <div class="logo-mark"></div>
+      <div>
+        <div class="logo-text">2027 INDYCAR <span>LINEUP</span></div>
+        <div class="logo-sub">Season Predictor</div>
+      </div>
+    </div>
+    <div class="hdr-right">
+      <div class="hdr-count"><strong id="hdr-filled">0</strong> / <span id="hdr-total">0</span></div>
+      <button class="hdr-btn" onclick="openCompare()">VIEW PREDICTIONS</button>
+      <button class="hdr-btn admin-btn" onclick="openAdminPrompt()">ADMIN</button>
+    </div>
+  </div>
+  <div id="progress-bar"><div id="progress-fill"></div></div>
+
+  <!-- confirmed drivers strip -->
+  <div id="confirmed-strip">
+    <span class="confirmed-label">✓ CONFIRMED</span>
+    <div class="confirmed-chips" id="confirmed-chips"></div>
+  </div>
+
+  <div id="main">
+    <div id="left">
+      <div class="sh">Full-Time Charter Teams</div>
+      <div class="teams-grid" id="full-grid"></div>
+      <div id="mfr-section">
+        <div id="mfr-header">
+          <div>
+            <div class="mfr-title">MANUFACTURER CHARTER CARS</div>
+            <div class="mfr-sub">Two additional manufacturer-backed entries</div>
+          </div>
+          <div class="toggle-wrap">
+            <span class="toggle-lbl" id="mfr-lbl">INACTIVE</span>
+            <button class="toggle" id="mfr-toggle" onclick="toggleMfr()"></button>
+          </div>
+        </div>
+        <div id="mfr-slots">
+          <div class="mfr-slot"><div class="slot" id="mfr-0" onclick="openModal('mfr-0','MFR CAR 1')"><span class="slot-label">MFR Car 1</span></div></div>
+          <div class="mfr-slot"><div class="slot" id="mfr-1" onclick="openModal('mfr-1','MFR CAR 2')"><span class="slot-label">MFR Car 2</span></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="right">
+      <div class="sh">Driver Pool</div>
+      <div class="pool-count" id="pool-count"></div>
+      <input class="pool-search" id="pool-search" placeholder="Search drivers…" oninput="renderPool()">
+      <div class="custom-add-row">
+        <input class="custom-input" id="custom-input" placeholder="Add custom driver…" onkeydown="if(event.key==='Enter')addCustomDriver()">
+        <button class="custom-add-btn" onclick="addCustomDriver()" title="Add driver">+</button>
+      </div>
+      <div id="driver-list"></div>
+    </div>
+  </div>
+
+  <div id="submit-bar">
+    <div class="status-text" id="status-text">Fill all team slots to submit your lineup</div>
+    <div class="btn-submit-wrap">
+      <input class="name-input" id="name-input" placeholder="Your name…" style="display:none"
+        onkeydown="if(event.key==='Enter')handleSubmit()">
+      <button class="btn btn-red" id="submit-btn" onclick="handleSubmit()" disabled>LOCK IN LINEUP</button>
+    </div>
+  </div>
+</div>
+
+<!-- Driver pick modal -->
+<div class="overlay" id="modal-overlay" onclick="if(event.target===this)closeModal()">
+  <div class="modal">
+    <div class="modal-hdr">
+      <div>
+        <div class="modal-title" id="modal-title">ASSIGN DRIVER</div>
+        <div class="modal-sub">Select a driver for this seat</div>
+      </div>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-search-wrap">
+      <input class="modal-search" id="modal-search" placeholder="Search…"
+        oninput="renderModalList()" onkeydown="modalKeydown(event)">
+    </div>
+    <div class="modal-list" id="modal-list"></div>
+  </div>
+</div>
+
+<!-- Password prompt -->
+<div class="overlay" id="pw-overlay" onclick="if(event.target===this)closePwOverlay()">
+  <div class="pw-box">
+    <div class="pw-title">ADMIN ACCESS</div>
+    <div class="pw-sub">Enter password to manage confirmed drivers</div>
+    <input class="pw-input" id="pw-input" type="password" placeholder="Password"
+      onkeydown="if(event.key==='Enter')checkPassword()">
+    <div class="pw-err" id="pw-err"></div>
+    <button class="pw-btn" onclick="checkPassword()">ENTER</button>
+  </div>
+</div>
+
+<!-- Admin panel -->
+<div class="big-overlay" id="admin-overlay" onclick="if(event.target===this)closeAdmin()">
+  <div class="admin-modal">
+    <div class="admin-hdr">
+      <div>
+        <div class="admin-title">CONFIRMED LINEUP</div>
+        <div style="font-size:11px;color:var(--grey);margin-top:2px">Enter confirmed drivers — used to score predictions</div>
+      </div>
+      <button class="modal-close" onclick="closeAdmin()">✕</button>
+    </div>
+    <div class="admin-body" id="admin-body"></div>
+    <div class="cmp-footer">
+      <button class="admin-save-btn" onclick="saveConfirmed()">SAVE CONFIRMED LINEUP</button>
+      <span id="admin-save-status" style="font-size:12px;color:var(--grey)"></span>
+    </div>
+  </div>
+</div>
+
+<!-- Compare overlay -->
+<div class="big-overlay" id="cmp-overlay" onclick="if(event.target===this)closeCompare()">
+  <div class="big-modal">
+    <div class="modal-hdr">
+      <div style="flex:1">
+        <div style="font-family:var(--fd);font-size:26px;letter-spacing:2px">COMPARE LINEUPS</div>
+        <div style="display:flex;align-items:center;gap:10px;margin-top:4px;flex-wrap:wrap">
+          <span style="font-size:12px;color:var(--grey)" id="cmp-count"></span>
+          <button class="subs-list-btn" onclick="toggleSubsList()">WHO SUBMITTED</button>
+        </div>
+        <div id="subs-list" style="display:none" class="subs-list"></div>
+      </div>
+      <button class="modal-close" onclick="closeCompare()">✕</button>
+    </div>
+    <div class="cmp-tabs">
+      <button class="tab-btn active" id="tab-team" onclick="setTab('team')">BY TEAM</button>
+      <button class="tab-btn" id="tab-person" onclick="setTab('person')">BY PERSON</button>
+    </div>
+    <div class="cmp-body" id="cmp-body"></div>
+    <div class="cmp-footer">
+      <button class="btn-outline" onclick="closeCompare()">CLOSE</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ── CONFIG ────────────────────────────────────────────────────────────────────
+const BIN_ID       = '6a3bfa0bda38895dfef8188c';
+const BASE_URL     = 'https://api.jsonbin.io/v3/b/' + BIN_ID;
+const ADMIN_PW     = 'DSE2027';
+const CONFIRMED_KEY = '__confirmed__';  // special record key in JSONBin
+
+const TEAMS = [
+  {id:'CGR',name:'Chip Ganassi Racing',    slots:3},
+  {id:'PRI',name:'Penske Racing',          slots:3},
+  {id:'AND',name:'Andretti Global',        slots:3},
+  {id:'RLL',name:'Rahal Letterman Lanigan',slots:3},
+  {id:'ECR',name:'Ed Carpenter Racing',    slots:2},
+  {id:'MSR',name:'Meyer Shank Racing',     slots:2},
+  {id:'AJF',name:'AJ Foyt Enterprises',   slots:2},
+  {id:'AMR',name:'Arrow McLaren',          slots:3},
+  {id:'DCR',name:'Dale Coyne Racing',      slots:2},
+  {id:'JHR',name:'Juncos Hollinger Racing',slots:2},
+];
+
+const DRIVERS = [
+  'Armstrong','Aron','Browning','Collet','Daly','De Tullio','de Vries','Delatraz',
+  'Dixon','Erricson','Ferrucci','Fornaroli','Foster','Grosjean','Hauger','Herta',
+  'Hughes','Ilott','Johnson','Kanaan','Kirkwood','Kucharczyk','Lawson','Lundgaard',
+  'Lundqvist','Malukas','Mcelrea','Mclaughlin','Nasr','Newgarden','Oward','Palou',
+  'Pourchaire','Power','Rahal','Rassmussen','Robb','Rosenqvist','Rossi','Rowe',
+  'Schumacher','Simpson','Sowery','Taylor','Tsunoda','Veekay','Vips'
+];
+
+// ── STATE ─────────────────────────────────────────────────────────────────────
+const asgn = {};
+const mfrAsgn = [null, null];
+let mfrActive = false;
+let submitted = false;
+let pendingSlotKey = null;
+let cmpTab = 'team';
+let toastTimer = null;
+let customDrivers = [];       // local only
+let confirmedLineup = {};     // {teamId-slotIndex: driverName} — loaded from JSONBin
+let showingSubsList = false;
+
+// ── JSONBin ───────────────────────────────────────────────────────────────────
+async function fetchAll() {
+  const r = await fetch(BASE_URL + '/latest', {headers:{'X-JSON-Confidentiality':'false'}});
+  if (!r.ok) throw new Error('fetch failed');
+  const j = await r.json();
+  const records = Array.isArray(j.record) ? j.record : [];
+  // separate confirmed record from submissions
+  const confirmed = records.find(r => r[CONFIRMED_KEY]) || null;
+  const subs = records.filter(r => !r[CONFIRMED_KEY]);
+  return {subs, confirmed: confirmed ? confirmed.data : {}};
+}
+
+async function writeAll(subs, confirmed) {
+  const records = [...subs];
+  if (Object.keys(confirmed).length > 0) {
+    records.push({[CONFIRMED_KEY]: true, data: confirmed});
+  }
+  const r = await fetch(BASE_URL, {
+    method:'PUT',
+    headers:{'Content-Type':'application/json','X-JSON-Confidentiality':'false'},
+    body: JSON.stringify(records)
+  });
+  if (!r.ok) throw new Error('write failed');
+}
+
+// ── INIT ──────────────────────────────────────────────────────────────────────
+async function init() {
+  renderTeams();
+  renderPool();
+  updateProgress();
+  // load confirmed lineup in background
+  try {
+    const {confirmed} = await fetchAll();
+    confirmedLineup = confirmed;
+    renderConfirmedStrip();
+  } catch(e) {}
+}
+
+// ── CONFIRMED STRIP ───────────────────────────────────────────────────────────
+function renderConfirmedStrip() {
+  const strip = document.getElementById('confirmed-strip');
+  const chipsEl = document.getElementById('confirmed-chips');
+  const drivers = Object.values(confirmedLineup).filter(Boolean);
+  if (drivers.length === 0) { strip.classList.remove('visible'); return; }
+  strip.classList.add('visible');
+  chipsEl.innerHTML = drivers.map(d => `<span class="confirmed-chip">${d}</span>`).join('');
+}
+
+// ── TEAMS ─────────────────────────────────────────────────────────────────────
+function renderTeams() {
+  const grid = document.getElementById('full-grid');
+  grid.innerHTML = '';
+  TEAMS.forEach(t => grid.appendChild(makeTeamCard(t)));
+}
+
+function makeTeamCard(team) {
+  const filled = countTeamFilled(team);
+  const card = document.createElement('div');
+  card.className = 'team-card' + (filled===team.slots?' complete':filled>0?' partial':'');
+  card.id = 'card-' + team.id;
+  card.innerHTML = `<div class="team-header">
+    <span class="team-name">${team.name}</span>
+    <span class="team-badge badge-full">Charter</span>
+  </div>
+  <div class="team-slots" id="slots-${team.id}"></div>`;
+  const slotsDiv = card.querySelector('.team-slots');
+  for (let i = 0; i < team.slots; i++) slotsDiv.appendChild(makeSlot(team.id, i));
+  return card;
+}
+
+function makeSlot(teamId, slotIndex) {
+  const key = teamId + '-' + slotIndex;
+  const driver = asgn[key];
+  const div = document.createElement('div');
+  div.className = 'slot' + (driver ? ' filled' : '');
+  div.id = 'slot-' + key;
+  if (driver) {
+    div.innerHTML = `<span class="slot-label">Car ${slotIndex+1}</span>
+      <span class="slot-driver">${driver}</span>
+      <button class="slot-remove" onclick="event.stopPropagation();removeDriver('${key}')">✕</button>`;
+  } else {
+    div.innerHTML = `<span class="slot-label">Car ${slotIndex+1} — click to assign</span>`;
+    div.onclick = () => openModal(key, `${teamId} — CAR ${slotIndex+1}`);
+  }
+  return div;
+}
+
+function refreshTeamCard(teamId) {
+  const team = TEAMS.find(t => t.id === teamId);
+  const slotsDiv = document.getElementById('slots-' + teamId);
+  slotsDiv.innerHTML = '';
+  for (let i = 0; i < team.slots; i++) slotsDiv.appendChild(makeSlot(teamId, i));
+  const filled = countTeamFilled(team);
+  const card = document.getElementById('card-' + teamId);
+  card.className = 'team-card' + (filled===team.slots?' complete':filled>0?' partial':'');
+}
+
+function countTeamFilled(team) {
+  let n = 0;
+  for (let i = 0; i < team.slots; i++) if (asgn[team.id+'-'+i]) n++;
+  return n;
+}
+
+// ── MFR ───────────────────────────────────────────────────────────────────────
+function toggleMfr() {
+  mfrActive = !mfrActive;
+  document.getElementById('mfr-section').classList.toggle('active', mfrActive);
+  document.getElementById('mfr-toggle').classList.toggle('on', mfrActive);
+  document.getElementById('mfr-lbl').textContent = mfrActive ? 'ACTIVE' : 'INACTIVE';
+  if (!mfrActive) { mfrAsgn[0]=null; mfrAsgn[1]=null; renderMfrSlots(); }
+  renderPool(); updateProgress();
+}
+
+function renderMfrSlots() {
+  for (let i = 0; i < 2; i++) {
+    const el = document.getElementById('mfr-'+i);
+    const driver = mfrAsgn[i];
+    if (driver) {
+      el.className = 'slot filled filled-mfr'; el.onclick = null;
+      el.innerHTML = `<span class="slot-label">MFR Car ${i+1}</span>
+        <span class="slot-driver slot-driver-mfr">${driver}</span>
+        <button class="slot-remove" style="color:var(--mfr-gold);background:rgba(212,160,23,0.15)"
+          onclick="event.stopPropagation();removeMfr(${i})">✕</button>`;
+    } else {
+      el.className = 'slot';
+      el.innerHTML = `<span class="slot-label">MFR Car ${i+1} — click to assign</span>`;
+      el.onclick = () => { if (mfrActive) openModal('mfr-'+i, 'MFR CAR '+(i+1)); };
+    }
+  }
+}
+
+function removeMfr(i) { mfrAsgn[i]=null; renderMfrSlots(); renderPool(); updateProgress(); }
+
+// ── DRIVER POOL ───────────────────────────────────────────────────────────────
+function allDrivers() { return [...DRIVERS, ...customDrivers]; }
+
+function getUsed() {
+  const s = new Set(Object.values(asgn).filter(Boolean));
+  if (mfrActive) mfrAsgn.forEach(d => d && s.add(d));
+  return s;
+}
+
+function renderPool() {
+  const used = getUsed();
+  const q = document.getElementById('pool-search').value.toLowerCase();
+  const list = document.getElementById('driver-list');
+  list.innerHTML = '';
+  const drivers = q ? allDrivers().filter(d => d.toLowerCase().includes(q)) : allDrivers();
+  drivers.forEach(d => {
+    const isCustom = customDrivers.includes(d);
+    const div = document.createElement('div');
+    div.className = 'driver-chip' + (used.has(d)?' used':'') + (isCustom?' custom-chip':'');
+    div.innerHTML = `<span class="chip-name">${d}${isCustom?' <span style="font-size:10px;color:var(--mfr-gold)">★</span>':''}</span><div class="chip-dot"></div>`;
+    list.appendChild(div);
+  });
+  const free = allDrivers().filter(d => !used.has(d)).length;
+  document.getElementById('pool-count').textContent = `${free} of ${allDrivers().length} available`;
+}
+
+function addCustomDriver() {
+  const input = document.getElementById('custom-input');
+  const name = input.value.trim();
+  if (!name) return;
+  if (allDrivers().map(d=>d.toLowerCase()).includes(name.toLowerCase())) {
+    showToast('Driver already in list'); return;
+  }
+  customDrivers.push(name);
+  input.value = '';
+  renderPool();
+  showToast(name + ' added to pool');
+}
+
+// ── MODAL ─────────────────────────────────────────────────────────────────────
+function openModal(key, title) {
+  pendingSlotKey = key;
+  document.getElementById('modal-title').textContent = title;
+  document.getElementById('modal-search').value = '';
+  renderModalList();
+  document.getElementById('modal-overlay').classList.add('open');
+  setTimeout(() => document.getElementById('modal-search').focus(), 80);
+}
+
+function closeModal() { document.getElementById('modal-overlay').classList.remove('open'); pendingSlotKey=null; }
+
+function renderModalList() {
+  const q = document.getElementById('modal-search').value.toLowerCase();
+  const used = getUsed();
+  const list = document.getElementById('modal-list');
+  list.innerHTML = '';
+  const drivers = q ? allDrivers().filter(d => d.toLowerCase().includes(q)) : allDrivers();
+  drivers.forEach(d => {
+    const div = document.createElement('div');
+    div.className = 'modal-driver' + (used.has(d)?' used':'');
+    div.innerHTML = used.has(d)
+      ? `<span>${d}</span><span class="modal-used-tag">assigned</span>`
+      : `<span>${d}</span>`;
+    if (!used.has(d)) div.onclick = () => assignDriver(d);
+    list.appendChild(div);
+  });
+}
+
+function modalKeydown(e) {
+  if (e.key==='Enter') { const f=document.querySelector('#modal-list .modal-driver:not(.used)'); if(f)f.click(); }
+  if (e.key==='Escape') closeModal();
+}
+
+function assignDriver(driver) {
+  const key = pendingSlotKey;
+  if (!key) return;
+  if (key.startsWith('mfr-')) {
+    mfrAsgn[parseInt(key.split('-')[1])] = driver;
+    renderMfrSlots();
+  } else {
+    asgn[key] = driver;
+    refreshTeamCard(key.split('-').slice(0,-1).join('-'));
+  }
+  closeModal(); renderPool(); updateProgress();
+  showToast(driver + ' assigned');
+}
+
+function removeDriver(key) {
+  delete asgn[key];
+  refreshTeamCard(key.split('-').slice(0,-1).join('-'));
+  renderPool(); updateProgress();
+}
+
+// ── PROGRESS ──────────────────────────────────────────────────────────────────
+function getTotalSlots() { return TEAMS.reduce((s,t)=>s+t.slots,0)+(mfrActive?2:0); }
+function getFilledCount() { return Object.values(asgn).filter(Boolean).length+(mfrActive?mfrAsgn.filter(Boolean).length:0); }
+
+function updateProgress() {
+  const total=getTotalSlots(), filled=getFilledCount();
+  const pct = total>0?(filled/total)*100:0;
+  const complete = filled===total&&total>0;
+  document.getElementById('progress-fill').style.width = pct+'%';
+  document.getElementById('hdr-filled').textContent = filled;
+  document.getElementById('hdr-total').textContent = total;
+  const statusEl=document.getElementById('status-text');
+  const nameInput=document.getElementById('name-input');
+  const submitBtn=document.getElementById('submit-btn');
+  if (submitted) {
+    statusEl.className='status-text complete';
+    statusEl.textContent='✓ Lineup locked in — share this page with others';
+    nameInput.style.display='none';
+    submitBtn.textContent='VIEW PREDICTIONS';
+    submitBtn.disabled=false;
+    submitBtn.className='btn btn-green';
+    submitBtn.onclick=openCompare;
+  } else if (complete) {
+    statusEl.className='status-text complete';
+    statusEl.textContent='✓ Lineup complete — enter your name to submit';
+    nameInput.style.display='';
+    submitBtn.disabled=false;
+    submitBtn.className='btn btn-red';
+    submitBtn.onclick=handleSubmit;
+  } else {
+    statusEl.className='status-text';
+    const rem=total-filled;
+    statusEl.textContent=rem+' slot'+(rem!==1?'s':'')+' remaining';
+    nameInput.style.display='none';
+    submitBtn.disabled=true;
+    submitBtn.className='btn btn-red';
+    submitBtn.onclick=handleSubmit;
+  }
+}
+
+// ── SUBMIT ────────────────────────────────────────────────────────────────────
+async function handleSubmit() {
+  if (submitted) { openCompare(); return; }
+  const name = document.getElementById('name-input').value.trim();
+  if (!name) { showToast('Enter your name first'); return; }
+
+  const btn = document.getElementById('submit-btn');
+  btn.disabled=true;
+  btn.innerHTML='<span class="spinner"></span><span style="margin-left:8px">SAVING…</span>';
+  btn.style.display='flex'; btn.style.alignItems='center';
+
+  try {
+    const {subs, confirmed} = await fetchAll();
+    // check duplicate name (case-insensitive)
+    const exists = subs.find(s => s.submittedBy.toLowerCase()===name.toLowerCase());
+    if (exists) {
+      showToast('Name already submitted — honour system!');
+      btn.disabled=false; btn.textContent='LOCK IN LINEUP'; btn.style.display='';
+      return;
+    }
+    const entry = {
+      submittedBy: name,
+      submittedAt: new Date().toISOString(),
+      assignments: Object.assign({},asgn),
+      mfrActive,
+      mfrAssignments: mfrAsgn.slice()
+    };
+    await writeAll([...subs, entry], confirmed);
+    submitted=true;
+    showToast('Lineup saved!');
+    updateProgress();
+  } catch(e) {
+    showToast('Save failed — check connection');
+    btn.disabled=false; btn.textContent='LOCK IN LINEUP'; btn.style.display='';
+  }
+}
+
+// ── ADMIN ─────────────────────────────────────────────────────────────────────
+function openAdminPrompt() {
+  document.getElementById('pw-input').value='';
+  document.getElementById('pw-err').textContent='';
+  document.getElementById('pw-overlay').classList.add('open');
+  setTimeout(()=>document.getElementById('pw-input').focus(),80);
+}
+
+function closePwOverlay() { document.getElementById('pw-overlay').classList.remove('open'); }
+
+function checkPassword() {
+  const val = document.getElementById('pw-input').value;
+  if (val === ADMIN_PW) {
+    closePwOverlay();
+    openAdmin();
+  } else {
+    document.getElementById('pw-err').textContent='Incorrect password';
+    document.getElementById('pw-input').value='';
+    document.getElementById('pw-input').focus();
+  }
+}
+
+function openAdmin() {
+  buildAdminForm();
+  document.getElementById('admin-overlay').classList.add('open');
+}
+
+function closeAdmin() { document.getElementById('admin-overlay').classList.remove('open'); }
+
+function buildAdminForm() {
+  const body = document.getElementById('admin-body');
+  body.innerHTML = '';
+
+  TEAMS.forEach(team => {
+    const block = document.createElement('div');
+    block.className = 'admin-team-block';
+    block.innerHTML = `<div class="admin-team-name">${team.name}</div><div class="admin-slots" id="admin-slots-${team.id}"></div>`;
+    const slotsDiv = block.querySelector('.admin-slots');
+    for (let i = 0; i < team.slots; i++) {
+      const key = team.id+'-'+i;
+      const val = confirmedLineup[key] || '';
+      const row = document.createElement('div');
+      row.className = 'admin-slot-row';
+      row.innerHTML = `<span class="admin-slot-label">Car ${i+1}</span>
+        <input class="admin-slot-input ${val?'confirmed':''}" id="adm-${key}" value="${val}" placeholder="TBC">`;
+      slotsDiv.appendChild(row);
+    }
+    body.appendChild(block);
+  });
+
+  // MFR
+  const mfrBlock = document.createElement('div');
+  mfrBlock.className = 'admin-team-block';
+  mfrBlock.innerHTML = `<div class="admin-team-name">Manufacturer Charter</div><div class="admin-slots"></div>`;
+  const mfrSlots = mfrBlock.querySelector('.admin-slots');
+  for (let i = 0; i < 2; i++) {
+    const key = 'mfr-'+i;
+    const val = confirmedLineup[key]||'';
+    const row = document.createElement('div');
+    row.className='admin-slot-row';
+    row.innerHTML=`<span class="admin-slot-label">MFR ${i+1}</span>
+      <input class="admin-slot-input ${val?'confirmed':''}" id="adm-${key}" value="${val}" placeholder="TBC">`;
+    mfrSlots.appendChild(row);
+  }
+  body.appendChild(mfrBlock);
+
+  // style confirmed inputs live
+  body.querySelectorAll('.admin-slot-input').forEach(inp => {
+    inp.addEventListener('input', () => {
+      inp.classList.toggle('confirmed', inp.value.trim().length > 0);
+    });
+  });
+}
+
+async function saveConfirmed() {
+  const statusEl = document.getElementById('admin-save-status');
+  statusEl.textContent = 'Saving…';
+  const newConfirmed = {};
+  TEAMS.forEach(team => {
+    for (let i = 0; i < team.slots; i++) {
+      const key = team.id+'-'+i;
+      const val = (document.getElementById('adm-'+key)||{}).value||'';
+      if (val.trim()) newConfirmed[key] = val.trim();
+    }
+  });
+  for (let i = 0; i < 2; i++) {
+    const key='mfr-'+i;
+    const val=(document.getElementById('adm-'+key)||{}).value||'';
+    if(val.trim()) newConfirmed[key]=val.trim();
+  }
+  try {
+    const {subs} = await fetchAll();
+    await writeAll(subs, newConfirmed);
+    confirmedLineup = newConfirmed;
+    renderConfirmedStrip();
+    statusEl.textContent = '✓ Saved';
+    showToast('Confirmed lineup saved');
+    setTimeout(()=>statusEl.textContent='',3000);
+  } catch(e) {
+    statusEl.textContent = '✗ Save failed';
+    showToast('Save failed — check connection');
+  }
+}
+
+// ── SCORE ─────────────────────────────────────────────────────────────────────
+function scoreSubmission(sub) {
+  const confirmed = confirmedLineup;
+  if (!Object.keys(confirmed).length) return null;
+  let correct=0, total=0;
+  // team slots
+  TEAMS.forEach(t=>{
+    for(let i=0;i<t.slots;i++){
+      const key=t.id+'-'+i;
+      if(confirmed[key]){
+        total++;
+        if((sub.assignments[key]||'').toLowerCase()===confirmed[key].toLowerCase()) correct++;
+      }
+    }
+  });
+  // mfr
+  if(sub.mfrActive){
+    for(let i=0;i<2;i++){
+      const key='mfr-'+i;
+      if(confirmed[key]){
+        total++;
+        if((sub.mfrAssignments[i]||'').toLowerCase()===confirmed[key].toLowerCase()) correct++;
+      }
+    }
+  }
+  return total>0 ? {correct,total,pct:Math.round(correct/total*100)} : null;
+}
+
+// ── COMPARE ───────────────────────────────────────────────────────────────────
+async function openCompare() {
+  document.getElementById('cmp-overlay').classList.add('open');
+  showingSubsList=false;
+  document.getElementById('subs-list').style.display='none';
+  const body=document.getElementById('cmp-body');
+  body.innerHTML='<div class="cmp-loading"><div class="spinner" style="width:22px;height:22px;border-width:2.5px"></div><div style="font-size:13px;color:var(--grey)">Loading predictions…</div></div>';
+  try {
+    const {subs,confirmed}=await fetchAll();
+    confirmedLineup=confirmed;
+    renderConfirmedStrip();
+    document.getElementById('cmp-count').textContent=subs.length+' prediction'+(subs.length!==1?'s':'')+' submitted';
+    // populate who submitted list
+    const subsListEl=document.getElementById('subs-list');
+    subsListEl.innerHTML=subs.length?subs.map(s=>`<span>${s.submittedBy}</span>`).join(''):'<span style="color:var(--grey)">None yet</span>';
+    renderCompare(subs);
+  } catch(e) {
+    body.innerHTML='<div style="text-align:center;padding:40px"><div class="cmp-err-title">LOAD ERROR</div><div style="font-size:13px;color:var(--grey)">Could not load submissions.</div></div>';
+  }
+}
+
+function closeCompare() { document.getElementById('cmp-overlay').classList.remove('open'); }
+
+function toggleSubsList() {
+  showingSubsList=!showingSubsList;
+  document.getElementById('subs-list').style.display=showingSubsList?'block':'none';
+}
+
+function setTab(tab) {
+  cmpTab=tab;
+  document.getElementById('tab-team').classList.toggle('active',tab==='team');
+  document.getElementById('tab-person').classList.toggle('active',tab==='person');
+  openCompare();
+}
+
+function renderCompare(subs) {
+  const body=document.getElementById('cmp-body');
+  if(subs.length===0){
+    body.innerHTML='<div class="cmp-empty"><div class="cmp-empty-title">NO SUBMISSIONS YET</div><div class="cmp-empty-sub">Be the first to lock in a lineup.</div></div>';
+    return;
+  }
+  const hasConfirmed=Object.keys(confirmedLineup).length>0;
+
+  const slotKeys=[];
+  TEAMS.forEach(t=>{for(let i=0;i<t.slots;i++) slotKeys.push({key:`${t.id}-${i}`,label:`Car ${i+1}`,teamId:t.id,teamName:t.name,type:'full'});});
+  if(subs.some(s=>s.mfrActive)){
+    slotKeys.push({key:'mfr-0',label:'MFR Car 1',teamId:'MFR',teamName:'Manufacturer Charter',type:'mfr'});
+    slotKeys.push({key:'mfr-1',label:'MFR Car 2',teamId:'MFR',teamName:'Manufacturer Charter',type:'mfr'});
+  }
+
+  function pickFor(s,key){
+    if(key.startsWith('mfr-')) return s.mfrActive?s.mfrAssignments[parseInt(key.split('-')[1])]:null;
+    return s.assignments[key]||null;
+  }
+  function isCorrect(key,driver){
+    if(!driver||!confirmedLineup[key]) return null;
+    return driver.toLowerCase()===confirmedLineup[key].toLowerCase();
+  }
+  function slotStats(key){
+    const picks=subs.map(s=>pickFor(s,key)).filter(Boolean);
+    if(!picks.length) return{top:null,pct:0,freq:{}};
+    const freq={};
+    picks.forEach(p=>freq[p]=(freq[p]||0)+1);
+    const [top,n]=Object.entries(freq).sort((a,b)=>b[1]-a[1])[0];
+    return{top,pct:Math.round(n/subs.length*100),freq};
+  }
+
+  body.innerHTML='';
+
+  if(cmpTab==='team'){
+    const groups={};
+    slotKeys.forEach(sk=>{
+      if(!groups[sk.teamId]) groups[sk.teamId]={teamName:sk.teamName,slots:[]};
+      groups[sk.teamId].slots.push(sk);
+    });
+    Object.entries(groups).forEach(([tid,{teamName,slots}])=>{
+      const block=document.createElement('div');
+      block.className='cmp-team-block';
+      block.innerHTML=`<div class="cmp-team-title">${teamName}</div>`;
+      slots.forEach(sk=>{
+        const {top,pct,freq}=slotStats(sk.key);
+        const isMfr=sk.type==='mfr';
+        const sorted=Object.entries(freq).sort((a,b)=>b[1]-a[1]);
+        const picks=subs.map(s=>({name:s.submittedBy,driver:pickFor(s,sk.key)||'—'}));
+        const confirmedDriver=confirmedLineup[sk.key];
+        const slotDiv=document.createElement('div');
+        slotDiv.style.marginBottom='16px';
+        let labelHtml=`<div class="cmp-slot-label">${sk.label}`;
+        if(confirmedDriver) labelHtml+=` <span style="color:var(--green);font-weight:700">✓ ${confirmedDriver}</span>`;
+        labelHtml+=`</div>`;
+        slotDiv.innerHTML=labelHtml;
+        if(top){
+          sorted.forEach(([d,n],ri)=>{
+            const pctVal=Math.round(n/subs.length*100);
+            const correct=isCorrect(sk.key,d);
+            const barColor=correct===true?'var(--green)':correct===false?'var(--red)':pctVal>=60?'var(--yellow)':'var(--grey-dim)';
+            const row=document.createElement('div');
+            row.className='cmp-bar-row';
+            row.innerHTML=`<span class="cmp-bar-name ${ri>0?'secondary':''} ${isMfr&&ri===0?'mfr-col':''}">${d}${correct===true?' ✓':correct===false?' ✗':''}</span>
+              <div class="cmp-bar-track" style="height:${ri===0?6:4}px">
+                <div class="cmp-bar-fill" style="width:${pctVal}%;background:${ri===0?barColor:'var(--grey-dim)'}"></div>
+              </div>
+              <span class="cmp-bar-pct">${pctVal}%</span>
+              <span class="cmp-bar-n">${n}/${subs.length}</span>`;
+            slotDiv.appendChild(row);
+          });
+          const picksDiv=document.createElement('div');
+          picksDiv.className='cmp-picks';
+          picks.forEach(p=>{
+            const correct=isCorrect(sk.key,p.driver);
+            picksDiv.innerHTML+=`<div class="cmp-pick-chip">
+              <span class="cmp-pick-name">${p.name}</span>
+              <span class="cmp-pick-driver ${isMfr?'mfr-col':''} ${correct===true?'correct':correct===false?'incorrect':''}">${p.driver}</span>
+            </div>`;
+          });
+          slotDiv.appendChild(picksDiv);
+        } else {
+          slotDiv.innerHTML+='<div class="cmp-no-picks">No picks for this slot</div>';
+        }
+        block.appendChild(slotDiv);
+      });
+      body.appendChild(block);
+    });
+  } else {
+    // sort by score desc if confirmed exists
+    const subsWithScore=subs.map(s=>({s,score:scoreSubmission(s)}));
+    if(hasConfirmed) subsWithScore.sort((a,b)=>(b.score?b.score.pct:0)-(a.score?a.score.pct:0));
+
+    subsWithScore.forEach(({s,score})=>{
+      const block=document.createElement('div');
+      block.className='person-block';
+      block.innerHTML=`<div class="person-hdr">
+        <div class="person-avatar">${s.submittedBy.charAt(0).toUpperCase()}</div>
+        <div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <div class="person-name">${s.submittedBy}</div>
+            ${score?`<span class="score-badge">${score.correct}/${score.total} · ${score.pct}%</span>`:''}
+          </div>
+          <div class="person-meta">${new Date(s.submittedAt).toLocaleString()}${s.mfrActive?' · MFR charter':''}</div>
+        </div>
+      </div>
+      <div class="person-chips"></div>`;
+      const chipsDiv=block.querySelector('.person-chips');
+      TEAMS.forEach(t=>{
+        for(let i=0;i<t.slots;i++){
+          const key=t.id+'-'+i;
+          const d=s.assignments[key];
+          if(d){
+            const correct=isCorrect(key,d);
+            chipsDiv.innerHTML+=`<div class="person-chip ${correct===true?'correct-chip':correct===false?'incorrect-chip':''}">
+              <span class="person-chip-team">${t.id}</span>
+              <span class="person-chip-driver">${d}${correct===true?' ✓':correct===false?' ✗':''}</span>
+            </div>`;
+          }
+        }
+      });
+      if(s.mfrActive){
+        s.mfrAssignments.forEach((d,i)=>{
+          if(d){
+            const key='mfr-'+i;
+            const correct=isCorrect(key,d);
+            chipsDiv.innerHTML+=`<div class="person-chip mfr-chip ${correct===true?'correct-chip':correct===false?'incorrect-chip':''}">
+              <span class="person-chip-team">MFR</span>
+              <span class="person-chip-driver">${d}${correct===true?' ✓':correct===false?' ✗':''}</span>
+            </div>`;
+          }
+        });
+      }
+      body.appendChild(block);
+    });
+  }
+}
+
+// ── TOAST ─────────────────────────────────────────────────────────────────────
+function showToast(msg){
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer=setTimeout(()=>t.classList.remove('show'),2400);
+}
+
+init();
+</script>
+</body>
+</html>
