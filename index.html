@@ -1,0 +1,882 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>2027 IndyCar Lineup Predictor</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0D0D0D;--surface:#1A1A1A;--surface2:#242424;--border:#2E2E2E;
+  --red:#C8102E;--yellow:#F5C518;--white:#F0EDE8;--grey:#888;--grey-dim:#555;
+  --green:#2ECC71;--mfr-gold:#D4A017;--mfr-gold-dim:#7A5C0A;
+  --fd:'Bebas Neue',sans-serif;--fb:'Inter',sans-serif;
+}
+body{background:var(--bg);color:var(--white);font-family:var(--fb);min-height:100vh;overflow-x:hidden}
+::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+*{box-sizing:border-box}
+@keyframes pulse{0%,100%{border-color:var(--grey-dim)}50%{border-color:var(--grey)}}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes snapin{0%{transform:scale(0.92);opacity:0.5}60%{transform:scale(1.02)}100%{transform:scale(1);opacity:1}}
+
+/* layout */
+#app{display:flex;flex-direction:column;min-height:100vh}
+#header{border-bottom:1px solid var(--border);padding:16px 24px;display:flex;align-items:center;
+  justify-content:space-between;position:sticky;top:0;background:rgba(13,13,13,0.96);
+  backdrop-filter:blur(8px);z-index:100}
+.logo-mark{width:30px;height:30px;background:var(--red);clip-path:polygon(0 0,100% 0,85% 100%,15% 100%);flex-shrink:0}
+.logo-text{font-family:var(--fd);font-size:22px;letter-spacing:2px;line-height:1}
+.logo-text span{color:var(--red)}
+.logo-sub{font-size:10px;color:var(--grey);letter-spacing:1px;text-transform:uppercase;margin-top:1px}
+#progress-bar{height:3px;background:var(--border)}
+#progress-fill{height:100%;width:0%;background:linear-gradient(90deg,var(--red),var(--yellow));transition:width 0.4s}
+#main{display:grid;grid-template-columns:1fr 252px;flex:1;min-height:0}
+#left{padding:20px 22px;border-right:1px solid var(--border);overflow-y:auto}
+#right{padding:16px 13px;display:flex;flex-direction:column;background:var(--surface);
+  position:sticky;top:80px;height:calc(100vh - 83px);overflow:hidden}
+#submit-bar{padding:14px 24px;border-top:1px solid var(--border);background:var(--bg);
+  display:flex;align-items:center;justify-content:space-between;
+  position:sticky;bottom:0;gap:14px;flex-wrap:wrap;z-index:50}
+
+/* section heading */
+.sh{font-family:var(--fd);font-size:15px;letter-spacing:2px;color:var(--grey);
+  margin-bottom:12px;text-transform:uppercase;display:flex;align-items:center;gap:10px}
+.sh::after{content:'';flex:1;height:1px;background:var(--border)}
+
+/* teams grid */
+.teams-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(264px,1fr));gap:12px;margin-bottom:22px}
+.team-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden;transition:border-color 0.3s}
+.team-card.partial{border-color:var(--yellow)}
+.team-card.complete{border-color:var(--green)}
+.team-header{padding:9px 14px;background:var(--surface2);border-bottom:1px solid var(--border);
+  display:flex;align-items:center;justify-content:space-between}
+.team-name{font-family:var(--fd);font-size:18px;letter-spacing:1.5px}
+.team-badge{font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;padding:3px 8px;border-radius:3px}
+.badge-full{color:var(--green);background:rgba(46,204,113,0.12)}
+.badge-part{color:var(--yellow);background:rgba(245,197,24,0.12)}
+.team-slots{padding:10px 12px;display:flex;flex-direction:column;gap:7px}
+
+/* slots */
+.slot{height:44px;border:1.5px dashed var(--grey-dim);border-radius:6px;
+  display:flex;align-items:center;justify-content:space-between;padding:0 12px;
+  cursor:pointer;background:#1E1E1E;transition:all 0.2s;animation:pulse 2s ease-in-out infinite;
+  position:relative}
+.slot:hover{border-color:var(--red);background:rgba(200,16,46,0.04)}
+.slot.filled{border-style:solid;border-color:var(--green);background:#192619;cursor:default;animation:none}
+.slot.filled-mfr{border-color:var(--mfr-gold);background:rgba(212,160,23,0.08)}
+.slot-label{font-size:11px;font-weight:500;letter-spacing:1px;text-transform:uppercase;color:var(--grey)}
+.slot-driver{font-weight:600;font-size:14px;color:var(--white)}
+.slot-driver-mfr{color:var(--mfr-gold)}
+.slot-remove{width:22px;height:22px;border-radius:50%;background:rgba(200,16,46,0.2);
+  border:none;color:var(--red);font-size:13px;display:flex;align-items:center;justify-content:center;
+  padding:0;cursor:pointer;opacity:0;transition:opacity 0.15s;flex-shrink:0}
+.slot:hover .slot-remove{opacity:1}
+.slot.snap{animation:snapin 0.25s ease-out}
+
+/* MFR section */
+#mfr-section{background:var(--surface);border:1px solid var(--mfr-gold-dim);border-radius:8px;
+  overflow:hidden;margin-bottom:22px;opacity:0.55;transition:all 0.3s}
+#mfr-section.active{opacity:1;border-color:var(--mfr-gold)}
+#mfr-header{padding:10px 14px;background:rgba(212,160,23,0.06);
+  border-bottom:1px solid var(--mfr-gold-dim);display:flex;align-items:center;justify-content:space-between}
+#mfr-section.active #mfr-header{border-bottom-color:var(--mfr-gold)}
+.mfr-title{font-family:var(--fd);font-size:16px;letter-spacing:1.5px;color:var(--mfr-gold)}
+.mfr-sub{font-size:11px;color:var(--grey);margin-top:1px}
+#mfr-slots{padding:10px 12px;display:flex;gap:10px}
+.mfr-slot{flex:1}
+.mfr-slot .slot{border-color:var(--mfr-gold-dim);pointer-events:none}
+#mfr-section.active .mfr-slot .slot{pointer-events:auto}
+#mfr-section.active .mfr-slot .slot:hover{border-color:var(--mfr-gold)}
+
+/* toggle */
+.toggle-wrap{display:flex;align-items:center;gap:9px}
+.toggle-lbl{font-size:11px;font-weight:500;color:var(--grey);letter-spacing:0.5px}
+.toggle{width:42px;height:22px;background:var(--border);border-radius:11px;position:relative;
+  cursor:pointer;transition:background 0.25s;border:none;flex-shrink:0}
+.toggle.on{background:var(--mfr-gold)}
+.toggle::after{content:'';width:16px;height:16px;background:var(--white);border-radius:50%;
+  position:absolute;top:3px;left:3px;transition:transform 0.25s}
+.toggle.on::after{transform:translateX(20px)}
+
+/* driver pool */
+.pool-count{font-size:11px;color:var(--grey);margin-bottom:7px;letter-spacing:0.5px}
+.pool-search{background:var(--surface2);border:1px solid var(--border);border-radius:6px;
+  padding:9px 12px;color:var(--white);font-family:var(--fb);font-size:13px;
+  width:100%;outline:none;transition:border-color 0.2s;margin-bottom:9px}
+.pool-search:focus{border-color:var(--red)}
+.pool-search::placeholder{color:var(--grey)}
+#driver-list{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:4px;padding-right:2px}
+.driver-chip{padding:7px 10px;background:var(--surface2);border:1px solid var(--border);
+  border-radius:6px;display:flex;align-items:center;justify-content:space-between;
+  transition:all 0.12s}
+.driver-chip.used{opacity:0.25;text-decoration:line-through;background:transparent;border-color:transparent}
+.chip-name{font-size:13px;font-weight:600;letter-spacing:0.3px}
+.chip-dot{width:6px;height:6px;border-radius:50%;background:var(--border)}
+.driver-chip.used .chip-dot{background:var(--grey-dim)}
+
+/* submit bar */
+.status-text{font-size:13px;color:var(--grey)}
+.status-text.complete{color:var(--green)}
+.name-input{background:var(--surface2);border:1px solid var(--border);border-radius:6px;
+  padding:9px 12px;color:var(--white);font-family:var(--fb);font-size:13px;
+  width:150px;outline:none;transition:border-color 0.2s}
+.name-input:focus{border-color:var(--red)}
+.name-input::placeholder{color:var(--grey)}
+.btn{font-family:var(--fd);font-size:17px;letter-spacing:2px;padding:10px 24px;
+  border-radius:6px;border:none;cursor:pointer;transition:all 0.2s;
+  clip-path:polygon(0 0,100% 0,97% 100%,3% 100%)}
+.btn-red{background:var(--red);color:var(--white)}
+.btn-red:hover{background:#e0112f}
+.btn-red:disabled{opacity:0.4;cursor:not-allowed}
+.btn-green{background:var(--green);color:var(--white)}
+.btn-outline{background:none;border:1px solid var(--border);color:var(--grey);
+  clip-path:none;font-family:var(--fd);font-size:17px;letter-spacing:2px;padding:10px 24px;border-radius:6px}
+.btn-outline:hover{border-color:var(--grey);color:var(--white)}
+.hdr-btn{background:none;border:1px solid var(--border);border-radius:6px;color:var(--grey);
+  font-size:12px;font-weight:500;padding:7px 14px;letter-spacing:0.5px;cursor:pointer;transition:all 0.2s;
+  font-family:var(--fb)}
+.hdr-btn:hover{border-color:var(--grey);color:var(--white)}
+.btn-submit-wrap{display:flex;align-items:center;gap:10px}
+.spinner{width:16px;height:16px;border:2px solid var(--border);border-top-color:var(--white);
+  border-radius:50%;animation:spin 0.7s linear infinite;display:inline-block;flex-shrink:0}
+
+/* modal */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.75);
+  display:none;align-items:center;justify-content:center;
+  backdrop-filter:blur(4px);z-index:500}
+.modal-overlay.open{display:flex}
+.modal{background:var(--surface);border:1px solid var(--border);border-radius:12px;
+  width:340px;max-height:75vh;display:flex;flex-direction:column;
+  box-shadow:0 24px 64px rgba(0,0,0,0.6);overflow:hidden}
+.modal-hdr{padding:14px 18px;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;justify-content:space-between}
+.modal-title{font-family:var(--fd);font-size:20px;letter-spacing:1px}
+.modal-sub{font-size:11px;color:var(--grey);margin-top:2px}
+.modal-close{background:none;border:none;color:var(--grey);font-size:20px;line-height:1;padding:4px;cursor:pointer}
+.modal-search-wrap{padding:10px 14px 0}
+.modal-search{background:var(--surface2);border:1px solid var(--border);border-radius:6px;
+  padding:9px 12px;color:var(--white);font-family:var(--fb);font-size:13px;
+  width:100%;outline:none;transition:border-color 0.2s}
+.modal-search:focus{border-color:var(--red)}
+.modal-search::placeholder{color:var(--grey)}
+.modal-list{flex:1;overflow-y:auto;padding:10px}
+.modal-driver{padding:9px 12px;border-radius:6px;cursor:pointer;font-size:14px;font-weight:500;
+  display:flex;align-items:center;justify-content:space-between;transition:background 0.1s}
+.modal-driver:hover{background:var(--surface2)}
+.modal-driver.used{opacity:0.28;text-decoration:line-through;cursor:not-allowed;pointer-events:none}
+.modal-used-tag{font-size:11px;color:var(--grey)}
+
+/* compare overlay */
+.cmp-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.88);
+  display:none;align-items:flex-start;justify-content:center;
+  backdrop-filter:blur(6px);z-index:600;overflow-y:auto;padding:40px 16px}
+.cmp-overlay.open{display:flex}
+.cmp-modal{background:var(--surface);border:1px solid var(--border);border-radius:12px;
+  width:100%;max-width:780px;box-shadow:0 32px 80px rgba(0,0,0,0.7);
+  display:flex;flex-direction:column;max-height:85vh}
+.cmp-hdr{padding:18px 24px;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+.cmp-title{font-family:var(--fd);font-size:26px;letter-spacing:2px}
+.cmp-count{font-size:12px;color:var(--grey);margin-top:3px}
+.cmp-tabs{border-bottom:1px solid var(--border);padding:0 16px;display:flex;gap:4px;flex-shrink:0}
+.tab-btn{background:none;border:none;padding:8px 18px;font-size:13px;font-weight:500;
+  letter-spacing:0.5px;cursor:pointer;color:var(--grey);border-bottom:2px solid transparent;
+  font-family:var(--fb);transition:color 0.2s}
+.tab-btn.active{color:var(--white);border-bottom-color:var(--red)}
+.cmp-body{flex:1;overflow-y:auto;padding:20px 24px}
+.cmp-footer{padding:14px 24px;border-top:1px solid var(--border);flex-shrink:0}
+.cmp-team-title{font-family:var(--fd);font-size:16px;letter-spacing:1.5px;color:var(--grey);
+  margin-bottom:12px;padding-bottom:6px;border-bottom:1px solid var(--border)}
+.cmp-team-block{margin-bottom:28px}
+.cmp-slot-label{font-size:11px;font-weight:500;letter-spacing:1px;text-transform:uppercase;
+  color:var(--grey-dim);margin-bottom:6px}
+.cmp-bar-row{display:flex;align-items:center;gap:8px;margin-bottom:4px}
+.cmp-bar-name{font-size:13px;font-weight:600;min-width:110px}
+.cmp-bar-name.secondary{font-size:12px;font-weight:400;color:var(--grey)}
+.cmp-bar-name.mfr-col{color:var(--mfr-gold)}
+.cmp-bar-track{flex:1;background:var(--border);border-radius:3px;overflow:hidden}
+.cmp-bar-fill{height:100%;border-radius:3px;transition:width 0.5s}
+.cmp-bar-pct{font-size:11px;color:var(--grey);min-width:36px;text-align:right}
+.cmp-bar-n{font-size:11px;color:var(--grey-dim);min-width:20px;text-align:right}
+.cmp-picks{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px;margin-bottom:10px}
+.cmp-pick-chip{background:var(--surface2);border:1px solid var(--border);border-radius:4px;
+  padding:3px 9px;font-size:12px;display:flex;align-items:center;gap:5px}
+.cmp-pick-name{color:var(--grey);font-size:11px}
+.cmp-pick-driver{font-weight:600;color:var(--white)}
+.cmp-pick-driver.mfr-col{color:var(--mfr-gold)}
+.person-block{margin-bottom:28px;padding-bottom:20px;border-bottom:1px solid var(--border)}
+.person-block:last-child{border-bottom:none}
+.person-hdr{display:flex;align-items:center;gap:12px;margin-bottom:12px}
+.person-avatar{width:36px;height:36px;border-radius:50%;background:var(--red);
+  display:flex;align-items:center;justify-content:center;font-family:var(--fd);
+  font-size:18px;letter-spacing:1px;flex-shrink:0}
+.person-name{font-weight:600;font-size:15px}
+.person-meta{font-size:11px;color:var(--grey)}
+.person-chips{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:5px}
+.person-chip{display:flex;gap:7px;align-items:center;background:var(--surface2);
+  border:1px solid var(--border);border-radius:4px;padding:5px 10px;font-size:12px}
+.person-chip.mfr-chip{background:rgba(212,160,23,0.08);border-color:var(--mfr-gold)}
+.person-chip-team{color:var(--grey-dim);font-size:10px;min-width:30px}
+.person-chip-driver{font-weight:600;color:var(--white)}
+.person-chip.mfr-chip .person-chip-team{color:var(--mfr-gold)}
+.person-chip.mfr-chip .person-chip-driver{color:var(--mfr-gold)}
+.cmp-empty{text-align:center;padding:48px 24px}
+.cmp-empty-title{font-family:var(--fd);font-size:28px;letter-spacing:2px;margin-bottom:8px}
+.cmp-empty-sub{font-size:13px;color:var(--grey);margin-bottom:24px}
+.cmp-loading{display:flex;flex-direction:column;align-items:center;gap:14px;padding:48px 24px}
+.cmp-err{text-align:center;padding:40px 24px}
+.cmp-err-title{font-family:var(--fd);font-size:22px;letter-spacing:2px;margin-bottom:8px;color:var(--red)}
+.cmp-no-picks{font-size:12px;color:var(--grey-dim);font-style:italic}
+
+/* toast */
+.toast{position:fixed;bottom:88px;left:50%;transform:translateX(-50%) translateY(10px);
+  background:#333;border:1px solid var(--border);color:var(--white);
+  padding:8px 18px;border-radius:20px;font-size:13px;font-weight:500;
+  z-index:9999;pointer-events:none;white-space:nowrap;opacity:0;transition:all 0.2s}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+/* header slots counter */
+.hdr-count{font-size:12px;color:var(--grey)}
+.hdr-count strong{color:var(--white);font-weight:600}
+.hdr-right{display:flex;align-items:center;gap:14px}
+.hdr-left{display:flex;align-items:center;gap:14px}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="header">
+    <div class="hdr-left">
+      <div class="logo-mark"></div>
+      <div>
+        <div class="logo-text">2027 INDYCAR <span>LINEUP</span></div>
+        <div class="logo-sub">Season Predictor</div>
+      </div>
+    </div>
+    <div class="hdr-right">
+      <div class="hdr-count"><strong id="hdr-filled">0</strong> / <span id="hdr-total">0</span></div>
+      <button class="hdr-btn" onclick="openCompare()">VIEW ALL PREDICTIONS</button>
+    </div>
+  </div>
+  <div id="progress-bar"><div id="progress-fill"></div></div>
+
+  <div id="main">
+    <div id="left">
+      <div class="sh">Full-Time Charter Teams</div>
+      <div class="teams-grid" id="full-grid"></div>
+
+      <div id="mfr-section">
+        <div id="mfr-header">
+          <div>
+            <div class="mfr-title">MANUFACTURER CHARTER CARS</div>
+            <div class="mfr-sub">Two additional manufacturer-backed entries</div>
+          </div>
+          <div class="toggle-wrap">
+            <span class="toggle-lbl" id="mfr-lbl">INACTIVE</span>
+            <button class="toggle" id="mfr-toggle" onclick="toggleMfr()"></button>
+          </div>
+        </div>
+        <div id="mfr-slots">
+          <div class="mfr-slot"><div class="slot" id="mfr-0" onclick="openModal('mfr-0','MFR CAR 1')">
+            <span class="slot-label">MFR Car 1</span>
+          </div></div>
+          <div class="mfr-slot"><div class="slot" id="mfr-1" onclick="openModal('mfr-1','MFR CAR 2')">
+            <span class="slot-label">MFR Car 2</span>
+          </div></div>
+        </div>
+      </div>
+
+      <div class="sh">Charter / Part-Time</div>
+      <div class="teams-grid" id="part-grid"></div>
+    </div>
+
+    <div id="right">
+      <div class="sh">Driver Pool</div>
+      <div class="pool-count" id="pool-count"></div>
+      <input class="pool-search" id="pool-search" placeholder="Search drivers…" oninput="renderPool()">
+      <div id="driver-list"></div>
+    </div>
+  </div>
+
+  <div id="submit-bar">
+    <div class="status-text" id="status-text">Fill all team slots to submit your lineup</div>
+    <div class="btn-submit-wrap">
+      <input class="name-input" id="name-input" placeholder="Your name…" style="display:none"
+        onkeydown="if(event.key==='Enter')handleSubmit()">
+      <button class="btn btn-red" id="submit-btn" onclick="handleSubmit()" disabled>LOCK IN LINEUP</button>
+    </div>
+  </div>
+</div>
+
+<!-- Driver pick modal -->
+<div class="modal-overlay" id="modal-overlay" onclick="if(event.target===this)closeModal()">
+  <div class="modal">
+    <div class="modal-hdr">
+      <div>
+        <div class="modal-title" id="modal-title">ASSIGN DRIVER</div>
+        <div class="modal-sub">Select a driver for this seat</div>
+      </div>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-search-wrap">
+      <input class="modal-search" id="modal-search" placeholder="Search…"
+        oninput="renderModalList()" onkeydown="modalKeydown(event)">
+    </div>
+    <div class="modal-list" id="modal-list"></div>
+  </div>
+</div>
+
+<!-- Compare overlay -->
+<div class="cmp-overlay" id="cmp-overlay" onclick="if(event.target===this)closeCompare()">
+  <div class="cmp-modal">
+    <div class="cmp-hdr">
+      <div>
+        <div class="cmp-title">COMPARE LINEUPS</div>
+        <div class="cmp-count" id="cmp-count"></div>
+      </div>
+      <button class="modal-close" onclick="closeCompare()">✕</button>
+    </div>
+    <div class="cmp-tabs">
+      <button class="tab-btn active" id="tab-team" onclick="setTab('team')">BY TEAM</button>
+      <button class="tab-btn" id="tab-person" onclick="setTab('person')">BY PERSON</button>
+    </div>
+    <div class="cmp-body" id="cmp-body"></div>
+    <div class="cmp-footer">
+      <button class="btn-outline" onclick="closeCompare()">CLOSE</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ── CONFIG ────────────────────────────────────────────────────────────────────
+const BIN_ID = '6a3bfa0bda38895dfef8188c';
+const BASE_URL = 'https://api.jsonbin.io/v3/b/' + BIN_ID;
+
+const TEAMS = [
+  {id:'CGR',name:'Chip Ganassi Racing',     type:'full',slots:4},
+  {id:'PRI',name:'Penske Racing',            type:'full',slots:4},
+  {id:'AND',name:'Andretti Global',          type:'full',slots:5},
+  {id:'RLL',name:'Rahal Letterman Lanigan',  type:'full',slots:3},
+  {id:'ECR',name:'Ed Carpenter Racing',      type:'full',slots:2},
+  {id:'MSR',name:'Meyer Shank Racing',       type:'full',slots:2},
+  {id:'AJF',name:'AJ Foyt Enterprises',      type:'full',slots:2},
+  {id:'AMR',name:'Arrow McLaren',            type:'full',slots:3},
+  {id:'DCR',name:'Dale Coyne Racing',        type:'full',slots:2},
+  {id:'JHR',name:'Juncos Hollinger Racing',  type:'full',slots:2},
+  {id:'CHT',name:'Charter / Part-Time',      type:'part',slots:3},
+];
+
+const DRIVERS = [
+  'Armstrong','Aron','Browning','Collet','Daly','De Tullio','de Vries','Delatraz',
+  'Dixon','Erricson','Ferrucci','Fornaroli','Foster','Grosjean','Hauger','Herta',
+  'Hughes','Ilott','Johnson','Kanaan','Kirkwood','Kucharczyk','Lawson','Lundgaard',
+  'Lundqvist','Malukas','Mcelrea','Mclaughlin','Nasr','Newgarden','Oward','Palou',
+  'Pourchaire','Power','Rahal','Rassmussen','Robb','Rosenqvist','Rossi','Rowe',
+  'Schumacher','Simpson','Sowery','Taylor','Tsunoda','Veekay','Vips'
+];
+
+// ── STATE ─────────────────────────────────────────────────────────────────────
+const asgn = {};          // 'TEAMID-slotIndex' => driverName
+const mfrAsgn = [null, null];
+let mfrActive = false;
+let submitted = false;
+let pendingSlotKey = null;
+let pendingSlotTitle = null;
+let cmpTab = 'team';
+let toastTimer = null;
+
+// ── INIT ──────────────────────────────────────────────────────────────────────
+function init() {
+  renderTeams();
+  renderPool();
+  updateProgress();
+}
+
+// ── TEAMS ─────────────────────────────────────────────────────────────────────
+function renderTeams() {
+  const fullGrid = document.getElementById('full-grid');
+  const partGrid = document.getElementById('part-grid');
+  fullGrid.innerHTML = '';
+  partGrid.innerHTML = '';
+  TEAMS.forEach(t => {
+    const card = makeTeamCard(t);
+    (t.type === 'full' ? fullGrid : partGrid).appendChild(card);
+  });
+}
+
+function makeTeamCard(team) {
+  const filled = countTeamFilled(team);
+  const card = document.createElement('div');
+  card.className = 'team-card' + (filled === team.slots ? ' complete' : filled > 0 ? ' partial' : '');
+  card.id = 'card-' + team.id;
+
+  const hdr = document.createElement('div');
+  hdr.className = 'team-header';
+  hdr.innerHTML = `<span class="team-name">${team.name}</span>
+    <span class="team-badge ${team.type==='full'?'badge-full':'badge-part'}">${team.type==='full'?'Charter':'Part-Time'}</span>`;
+
+  const slotsDiv = document.createElement('div');
+  slotsDiv.className = 'team-slots';
+  slotsDiv.id = 'slots-' + team.id;
+
+  for (let i = 0; i < team.slots; i++) {
+    slotsDiv.appendChild(makeSlot(team.id, i));
+  }
+
+  card.appendChild(hdr);
+  card.appendChild(slotsDiv);
+  return card;
+}
+
+function makeSlot(teamId, slotIndex) {
+  const key = teamId + '-' + slotIndex;
+  const driver = asgn[key];
+  const div = document.createElement('div');
+  div.className = 'slot' + (driver ? ' filled' : '');
+  div.id = 'slot-' + key;
+
+  if (driver) {
+    div.innerHTML = `<span class="slot-label">Car ${slotIndex+1}</span>
+      <span class="slot-driver">${driver}</span>
+      <button class="slot-remove" onclick="event.stopPropagation();removeDriver('${key}')">✕</button>`;
+  } else {
+    div.innerHTML = `<span class="slot-label">Car ${slotIndex+1} — click to assign</span>`;
+    div.onclick = () => openModal(key, `${teamId} — CAR ${slotIndex+1}`);
+  }
+  return div;
+}
+
+function refreshTeamCard(teamId) {
+  const team = TEAMS.find(t => t.id === teamId);
+  const slotsDiv = document.getElementById('slots-' + teamId);
+  slotsDiv.innerHTML = '';
+  for (let i = 0; i < team.slots; i++) {
+    slotsDiv.appendChild(makeSlot(teamId, i));
+  }
+  const filled = countTeamFilled(team);
+  const card = document.getElementById('card-' + teamId);
+  card.className = 'team-card' + (filled === team.slots ? ' complete' : filled > 0 ? ' partial' : '');
+}
+
+function countTeamFilled(team) {
+  let n = 0;
+  for (let i = 0; i < team.slots; i++) if (asgn[team.id + '-' + i]) n++;
+  return n;
+}
+
+// ── MFR ───────────────────────────────────────────────────────────────────────
+function toggleMfr() {
+  mfrActive = !mfrActive;
+  document.getElementById('mfr-section').classList.toggle('active', mfrActive);
+  document.getElementById('mfr-toggle').classList.toggle('on', mfrActive);
+  document.getElementById('mfr-lbl').textContent = mfrActive ? 'ACTIVE' : 'INACTIVE';
+  if (!mfrActive) {
+    mfrAsgn[0] = null; mfrAsgn[1] = null;
+    renderMfrSlots();
+  }
+  renderPool();
+  updateProgress();
+}
+
+function renderMfrSlots() {
+  for (let i = 0; i < 2; i++) {
+    const el = document.getElementById('mfr-' + i);
+    const driver = mfrAsgn[i];
+    if (driver) {
+      el.className = 'slot filled filled-mfr';
+      el.onclick = null;
+      el.innerHTML = `<span class="slot-label">MFR Car ${i+1}</span>
+        <span class="slot-driver slot-driver-mfr">${driver}</span>
+        <button class="slot-remove" style="color:var(--mfr-gold);background:rgba(212,160,23,0.15)"
+          onclick="event.stopPropagation();removeMfr(${i})">✕</button>`;
+    } else {
+      el.className = 'slot';
+      el.innerHTML = `<span class="slot-label">MFR Car ${i+1} — click to assign</span>`;
+      el.onclick = () => { if (mfrActive) openModal('mfr-' + i, 'MFR CAR ' + (i+1)); };
+    }
+  }
+}
+
+function removeMfr(i) {
+  mfrAsgn[i] = null;
+  renderMfrSlots();
+  renderPool();
+  updateProgress();
+}
+
+// ── DRIVER POOL ───────────────────────────────────────────────────────────────
+function getUsed() {
+  const s = new Set(Object.values(asgn).filter(Boolean));
+  if (mfrActive) mfrAsgn.forEach(d => d && s.add(d));
+  return s;
+}
+
+function renderPool() {
+  const used = getUsed();
+  const q = document.getElementById('pool-search').value.toLowerCase();
+  const list = document.getElementById('driver-list');
+  list.innerHTML = '';
+  const drivers = q ? DRIVERS.filter(d => d.toLowerCase().includes(q)) : DRIVERS;
+  drivers.forEach(d => {
+    const div = document.createElement('div');
+    div.className = 'driver-chip' + (used.has(d) ? ' used' : '');
+    div.innerHTML = `<span class="chip-name">${d}</span><div class="chip-dot"></div>`;
+    list.appendChild(div);
+  });
+  const free = DRIVERS.filter(d => !used.has(d)).length;
+  document.getElementById('pool-count').textContent = `${free} of ${DRIVERS.length} available`;
+}
+
+// ── MODAL ─────────────────────────────────────────────────────────────────────
+function openModal(key, title) {
+  pendingSlotKey = key;
+  pendingSlotTitle = title;
+  document.getElementById('modal-title').textContent = title;
+  document.getElementById('modal-search').value = '';
+  renderModalList();
+  document.getElementById('modal-overlay').classList.add('open');
+  setTimeout(() => document.getElementById('modal-search').focus(), 80);
+}
+
+function closeModal() {
+  document.getElementById('modal-overlay').classList.remove('open');
+  pendingSlotKey = null;
+}
+
+function renderModalList() {
+  const q = document.getElementById('modal-search').value.toLowerCase();
+  const used = getUsed();
+  const list = document.getElementById('modal-list');
+  list.innerHTML = '';
+  const drivers = q ? DRIVERS.filter(d => d.toLowerCase().includes(q)) : DRIVERS;
+  drivers.forEach(d => {
+    const div = document.createElement('div');
+    div.className = 'modal-driver' + (used.has(d) ? ' used' : '');
+    div.innerHTML = used.has(d)
+      ? `<span>${d}</span><span class="modal-used-tag">assigned</span>`
+      : `<span>${d}</span>`;
+    if (!used.has(d)) div.onclick = () => assignDriver(d);
+    list.appendChild(div);
+  });
+}
+
+function modalKeydown(e) {
+  if (e.key === 'Enter') {
+    const first = document.querySelector('#modal-list .modal-driver:not(.used)');
+    if (first) first.click();
+  }
+  if (e.key === 'Escape') closeModal();
+}
+
+function assignDriver(driver) {
+  const key = pendingSlotKey;
+  if (!key) return;
+
+  if (key.startsWith('mfr-')) {
+    const i = parseInt(key.split('-')[1]);
+    mfrAsgn[i] = driver;
+    renderMfrSlots();
+  } else {
+    asgn[key] = driver;
+    const parts = key.split('-');
+    const teamId = parts.slice(0, parts.length - 1).join('-');
+    refreshTeamCard(teamId);
+  }
+
+  closeModal();
+  renderPool();
+  updateProgress();
+  showToast(driver + ' assigned');
+}
+
+function removeDriver(key) {
+  delete asgn[key];
+  const parts = key.split('-');
+  const teamId = parts.slice(0, parts.length - 1).join('-');
+  refreshTeamCard(teamId);
+  renderPool();
+  updateProgress();
+}
+
+// ── PROGRESS ──────────────────────────────────────────────────────────────────
+function getTotalSlots() {
+  return TEAMS.reduce((s, t) => s + t.slots, 0) + (mfrActive ? 2 : 0);
+}
+
+function getFilledCount() {
+  return Object.values(asgn).filter(Boolean).length + (mfrActive ? mfrAsgn.filter(Boolean).length : 0);
+}
+
+function updateProgress() {
+  const total = getTotalSlots();
+  const filled = getFilledCount();
+  const pct = total > 0 ? (filled / total) * 100 : 0;
+  const complete = filled === total && total > 0;
+
+  document.getElementById('progress-fill').style.width = pct + '%';
+  document.getElementById('hdr-filled').textContent = filled;
+  document.getElementById('hdr-total').textContent = total;
+
+  const statusEl = document.getElementById('status-text');
+  const nameInput = document.getElementById('name-input');
+  const submitBtn = document.getElementById('submit-btn');
+
+  if (submitted) {
+    statusEl.className = 'status-text complete';
+    statusEl.textContent = '✓ Lineup locked in — share this page with others';
+    nameInput.style.display = 'none';
+    submitBtn.textContent = 'VIEW ALL PREDICTIONS';
+    submitBtn.disabled = false;
+    submitBtn.className = 'btn btn-green';
+    submitBtn.onclick = openCompare;
+  } else if (complete) {
+    statusEl.className = 'status-text complete';
+    statusEl.textContent = '✓ Lineup complete — enter your name to submit';
+    nameInput.style.display = '';
+    submitBtn.disabled = false;
+    submitBtn.className = 'btn btn-red';
+    submitBtn.onclick = handleSubmit;
+  } else {
+    statusEl.className = 'status-text';
+    const rem = total - filled;
+    statusEl.textContent = rem + ' slot' + (rem !== 1 ? 's' : '') + ' remaining';
+    nameInput.style.display = 'none';
+    submitBtn.disabled = true;
+    submitBtn.className = 'btn btn-red';
+    submitBtn.onclick = handleSubmit;
+  }
+}
+
+// ── SUBMIT ────────────────────────────────────────────────────────────────────
+async function handleSubmit() {
+  if (submitted) { openCompare(); return; }
+  const name = document.getElementById('name-input').value.trim();
+  if (!name) { showToast('Enter your name first'); return; }
+
+  const btn = document.getElementById('submit-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span><span>SAVING…</span>';
+  btn.style.display = 'flex';
+  btn.style.alignItems = 'center';
+  btn.style.gap = '8px';
+
+  try {
+    const entry = {
+      submittedBy: name,
+      submittedAt: new Date().toISOString(),
+      assignments: Object.assign({}, asgn),
+      mfrActive,
+      mfrAssignments: mfrAsgn.slice()
+    };
+    await pushSubmission(entry);
+    submitted = true;
+    showToast('Lineup saved!');
+    updateProgress();
+  } catch(e) {
+    showToast('Save failed — check your connection');
+    btn.disabled = false;
+    btn.textContent = 'LOCK IN LINEUP';
+  }
+}
+
+// ── JSONBIN ───────────────────────────────────────────────────────────────────
+async function fetchSubmissions() {
+  const r = await fetch(BASE_URL + '/latest', {headers:{'X-JSON-Confidentiality':'false'}});
+  if (!r.ok) throw new Error('fetch failed');
+  const j = await r.json();
+  return Array.isArray(j.record) ? j.record : [];
+}
+
+async function pushSubmission(entry) {
+  const data = await fetchSubmissions();
+  data.push(entry);
+  const r = await fetch(BASE_URL, {
+    method: 'PUT',
+    headers: {'Content-Type':'application/json','X-JSON-Confidentiality':'false'},
+    body: JSON.stringify(data)
+  });
+  if (!r.ok) throw new Error('write failed');
+}
+
+// ── COMPARE ───────────────────────────────────────────────────────────────────
+async function openCompare() {
+  document.getElementById('cmp-overlay').classList.add('open');
+  const body = document.getElementById('cmp-body');
+  body.innerHTML = '<div class="cmp-loading"><div class="spinner" style="width:22px;height:22px;border-width:2.5px"></div><div style="font-size:13px;color:var(--grey)">Loading predictions…</div></div>';
+
+  try {
+    const subs = await fetchSubmissions();
+    document.getElementById('cmp-count').textContent = subs.length + ' prediction' + (subs.length !== 1 ? 's' : '') + ' submitted';
+    renderCompare(subs);
+  } catch(e) {
+    body.innerHTML = '<div class="cmp-err"><div class="cmp-err-title">LOAD ERROR</div><div style="font-size:13px;color:var(--grey)">Could not load submissions. Check your connection.</div></div>';
+  }
+}
+
+function closeCompare() {
+  document.getElementById('cmp-overlay').classList.remove('open');
+}
+
+function setTab(tab) {
+  cmpTab = tab;
+  document.getElementById('tab-team').classList.toggle('active', tab === 'team');
+  document.getElementById('tab-person').classList.toggle('active', tab === 'person');
+  // re-render with cached subs if available
+  openCompare();
+}
+
+function renderCompare(subs) {
+  const body = document.getElementById('cmp-body');
+
+  if (subs.length === 0) {
+    body.innerHTML = '<div class="cmp-empty"><div class="cmp-empty-title">NO SUBMISSIONS YET</div><div class="cmp-empty-sub">Be the first to lock in a lineup.</div></div>';
+    return;
+  }
+
+  // build slot key list
+  const slotKeys = [];
+  TEAMS.forEach(t => {
+    for (let i = 0; i < t.slots; i++)
+      slotKeys.push({key:`${t.id}-${i}`, label:`Car ${i+1}`, teamId:t.id, teamName:t.name, type:t.type});
+  });
+  const anyMfr = subs.some(s => s.mfrActive);
+  if (anyMfr) {
+    slotKeys.push({key:'mfr-0', label:'MFR Car 1', teamId:'MFR', teamName:'Manufacturer Charter', type:'mfr'});
+    slotKeys.push({key:'mfr-1', label:'MFR Car 2', teamId:'MFR', teamName:'Manufacturer Charter', type:'mfr'});
+  }
+
+  function pickFor(s, key) {
+    if (key.startsWith('mfr-')) return s.mfrActive ? s.mfrAssignments[parseInt(key.split('-')[1])] : null;
+    return s.assignments[key] || null;
+  }
+
+  function slotStats(key) {
+    const picks = subs.map(s => pickFor(s, key)).filter(Boolean);
+    if (!picks.length) return {top:null, pct:0, freq:{}};
+    const freq = {};
+    picks.forEach(p => freq[p] = (freq[p]||0) + 1);
+    const [top, n] = Object.entries(freq).sort((a,b) => b[1]-a[1])[0];
+    return {top, pct: Math.round(n/subs.length*100), freq};
+  }
+
+  body.innerHTML = '';
+
+  if (cmpTab === 'team') {
+    // group by team
+    const groups = {};
+    slotKeys.forEach(sk => {
+      if (!groups[sk.teamId]) groups[sk.teamId] = {teamName: sk.teamName, slots: []};
+      groups[sk.teamId].slots.push(sk);
+    });
+
+    Object.entries(groups).forEach(([tid, {teamName, slots}]) => {
+      const block = document.createElement('div');
+      block.className = 'cmp-team-block';
+      block.innerHTML = `<div class="cmp-team-title">${teamName}</div>`;
+
+      slots.forEach(sk => {
+        const {top, pct, freq} = slotStats(sk.key);
+        const isMfr = sk.type === 'mfr';
+        const sorted = Object.entries(freq).sort((a,b) => b[1]-a[1]);
+        const picks = subs.map(s => ({name: s.submittedBy, driver: pickFor(s, sk.key) || '—'}));
+
+        const slotDiv = document.createElement('div');
+        slotDiv.style.marginBottom = '16px';
+        slotDiv.innerHTML = `<div class="cmp-slot-label">${sk.label}</div>`;
+
+        if (top) {
+          sorted.forEach(([d, n], ri) => {
+            const pctVal = Math.round(n/subs.length*100);
+            const barColor = pctVal===100 ? 'var(--green)' : pctVal>=60 ? 'var(--yellow)' : 'var(--red)';
+            const row = document.createElement('div');
+            row.className = 'cmp-bar-row';
+            row.innerHTML = `
+              <span class="cmp-bar-name ${ri>0?'secondary':''} ${isMfr&&ri===0?'mfr-col':''}">${d}</span>
+              <div class="cmp-bar-track" style="height:${ri===0?6:4}px">
+                <div class="cmp-bar-fill" style="width:${pctVal}%;background:${ri===0?barColor:'var(--grey-dim)'}"></div>
+              </div>
+              <span class="cmp-bar-pct">${pctVal}%</span>
+              <span class="cmp-bar-n">${n}/${subs.length}</span>`;
+            slotDiv.appendChild(row);
+          });
+
+          const picksDiv = document.createElement('div');
+          picksDiv.className = 'cmp-picks';
+          picks.forEach(p => {
+            picksDiv.innerHTML += `<div class="cmp-pick-chip">
+              <span class="cmp-pick-name">${p.name}</span>
+              <span class="cmp-pick-driver ${isMfr?'mfr-col':''}">${p.driver}</span>
+            </div>`;
+          });
+          slotDiv.appendChild(picksDiv);
+        } else {
+          slotDiv.innerHTML += '<div class="cmp-no-picks">No picks for this slot</div>';
+        }
+
+        block.appendChild(slotDiv);
+      });
+
+      body.appendChild(block);
+    });
+
+  } else {
+    // by person
+    subs.forEach(s => {
+      const block = document.createElement('div');
+      block.className = 'person-block';
+      block.innerHTML = `
+        <div class="person-hdr">
+          <div class="person-avatar">${s.submittedBy.charAt(0).toUpperCase()}</div>
+          <div>
+            <div class="person-name">${s.submittedBy}</div>
+            <div class="person-meta">${new Date(s.submittedAt).toLocaleString()}${s.mfrActive?' · MFR charter included':''}</div>
+          </div>
+        </div>
+        <div class="person-chips" id="pc-${Math.random().toString(36).slice(2)}"></div>`;
+
+      const chipsDiv = block.querySelector('.person-chips');
+
+      TEAMS.forEach(t => {
+        for (let i = 0; i < t.slots; i++) {
+          const d = s.assignments[t.id + '-' + i];
+          if (d) {
+            chipsDiv.innerHTML += `<div class="person-chip">
+              <span class="person-chip-team">${t.id}</span>
+              <span class="person-chip-driver">${d}</span>
+            </div>`;
+          }
+        }
+      });
+
+      if (s.mfrActive) {
+        s.mfrAssignments.forEach((d, i) => {
+          if (d) {
+            chipsDiv.innerHTML += `<div class="person-chip mfr-chip">
+              <span class="person-chip-team">MFR</span>
+              <span class="person-chip-driver">${d}</span>
+            </div>`;
+          }
+        });
+      }
+
+      body.appendChild(block);
+    });
+  }
+}
+
+// ── TOAST ─────────────────────────────────────────────────────────────────────
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 2200);
+}
+
+// ── GO ────────────────────────────────────────────────────────────────────────
+init();
+</script>
+</body>
+</html>
